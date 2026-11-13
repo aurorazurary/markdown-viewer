@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Markdown Viewer</title>
+</head>
+<body>
+  <header id="topbar">
+    <div class="group">
+      <button id="btn-open" class="icon" title="Open… (Ctrl+O)" data-icon="open"></button>
+      <button id="btn-new" class="icon" title="New window (Ctrl+N)" data-icon="newwin"></button>
+      <button id="btn-outline" class="icon" title="Outline (Ctrl+Shift+O)" data-icon="outline"></button>
+    </div>
+    <div id="docname" title=""></div>
+    <div class="group">
+      <div id="modes" role="tablist" aria-label="View mode">
+        <button data-mode="view" role="tab" title="Read (Ctrl+E toggles)">Read</button>
+        <button data-mode="edit" role="tab" title="Edit raw text (Ctrl+E toggles)">Edit</button>
+        <button data-mode="split" role="tab" title="Edit with live preview (Ctrl+\)">Split</button>
+      </div>
+      <button id="btn-save" class="icon" title="Save (Ctrl+S)" data-icon="save"></button>
+      <div class="menu-wrap">
+        <button id="btn-export" class="icon" title="Export" data-icon="export"></button>
+        <div id="export-menu" class="menu" hidden>
+          <button data-export="pdf">Export as PDF…</button>
+          <button data-export="html">Export as HTML…</button>
+          <hr>
+          <button data-export="saveas">Save as… <kbd>Ctrl+Shift+S</kbd></button>
+          <button data-export="folder">Show in folder</button>
+        </div>
+      </div>
+      <button id="btn-theme" class="icon" title="Theme" data-icon="theme-system"></button>
+    </div>
+  </header>
+
+  <div id="toolbar" hidden>
+    <button data-cmd="h1" title="Heading 1 (Ctrl+1)">H1</button>
+    <button data-cmd="h2" title="Heading 2 (Ctrl+2)">H2</button>
+    <button data-cmd="h3" title="Heading 3 (Ctrl+3)">H3</button>
+    <button data-cmd="p" title="Normal text (remove heading)" class="txt">¶</button>
+    <span class="sep"></span>
+    <button data-cmd="bold" title="Bold (Ctrl+B)" class="txt"><b>B</b></button>
+    <button data-cmd="italic" title="Italic (Ctrl+I)" class="txt"><i>I</i></button>
+    <button data-cmd="strike" title="Strikethrough (Ctrl+Shift+X)" class="txt"><s>S</s></button>
+    <button data-cmd="code" title="Inline code (Ctrl+`)" data-icon="code"></button>
+    <span class="sep"></span>
+    <button data-cmd="link" title="Link (Ctrl+K)" data-icon="link"></button>
+    <button data-cmd="image" title="Image" data-icon="image"></button>
+    <span class="sep"></span>
+    <button data-cmd="ul" title="Bullet list (Ctrl+Shift+8)" data-icon="ul"></button>
+    <button data-cmd="ol" title="Numbered list (Ctrl+Shift+7)" data-icon="ol"></button>
+    <button data-cmd="task" title="Task list (Ctrl+Shift+9)" data-icon="task"></button>
+    <button data-cmd="quote" title="Quote" data-icon="quote"></button>
+    <span class="sep"></span>
+    <button data-cmd="codeblock" title="Code block" data-icon="codeblock"></button>
+    <button data-cmd="table" title="Table (Ctrl+Shift+T): insert a table · convert selected lines (tab, comma, | or 2+ spaces separated) · tidy the table under the cursor" data-icon="table"></button>
+    <button data-cmd="tablerow" title="Add table row below" data-icon="tablerow"></button>
+    <button data-cmd="hr" title="Horizontal rule" data-icon="hr"></button>
+    <span class="sep"></span>
+    <button data-cmd="undo" title="Undo (Ctrl+Z)" data-icon="undo"></button>
+    <button data-cmd="redo" title="Redo (Ctrl+Y)" data-icon="redo"></button>
+  </div>
+
+  <div id="banner" hidden>
+    <span>This file was changed by another program.</span>
+    <button id="banner-reload">Load their version</button>
+    <button id="banner-keep">Keep mine</button>
+  </div>
+
+  <main id="main">
+    <nav id="outline" hidden aria-label="Outline"></nav>
+    <section id="panes">
+      <div id="empty">
+        <div class="empty-inner">
+          <h1>Markdown Viewer</h1>
+          <p>Drop a <code>.md</code> file here, or</p>
+          <p><button id="empty-open" class="primary">Open a file…</button> <button id="empty-new">New document</button></p>
+          <p class="hint">Ctrl+O open · Ctrl+E read/edit · Ctrl+S save · Ctrl+F find</p>
+        </div>
+      </div>
+      <div id="editor-pane" hidden></div>
+      <div id="view-pane" hidden tabindex="-1"><article id="view" class="markdown-body"></article></div>
+    </section>
+  </main>
+
+  <div id="findbar" hidden>
+    <input id="find-input" placeholder="Find" spellcheck="false">
+    <span id="find-count"></span>
+    <button id="find-prev" class="icon" title="Previous (Shift+Enter)" data-icon="up"></button>
+    <button id="find-next" class="icon" title="Next (Enter)" data-icon="down"></button>
+    <button id="find-close" class="icon" title="Close (Esc)" data-icon="close"></button>
+  </div>
+  <div id="toast" hidden></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
