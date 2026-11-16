@@ -3,7 +3,7 @@
 A **lightweight Windows tool for easy viewing and quick editing of Markdown (`.md`) files**.
 Files open as a clean, rendered page (GitHub style). When you want to change something, switch to the raw text, where a **built-in formatting toolbar** handles headings, lists, links, tables and code blocks for you. You can also **export any `.md` file as PDF or HTML**, and for long files, get an **AI summary** (or ask what you want from the file) using **your own API key**.
 
-- **Installer: about 1.5 MB** (the app itself is a 3.8 MB exe). It uses the WebView2 engine that ships with Windows 11 instead of bundling a browser.
+- **Installer: about 1.7 MB** (the app itself is a 4.2 MB exe). It uses the WebView2 engine that ships with Windows 11 instead of bundling a browser.
 - Starts in under a second, one window per file.
 
 ![Read view](docs/screenshots/read.png)
