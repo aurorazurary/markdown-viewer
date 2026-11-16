@@ -8,7 +8,7 @@ export const el = {
   outline: $('#outline'), toolbar: $('#toolbar'), docname: $('#docname'),
   banner: $('#banner'), bannerReload: $('#banner-reload'), bannerKeep: $('#banner-keep'),
   modes: $('#modes'), save: $('#btn-save'), open: $('#btn-open'), newWin: $('#btn-new'),
-  outlineBtn: $('#btn-outline'), exportBtn: $('#btn-export'), exportMenu: $('#export-menu'), theme: $('#btn-theme'),
+  outlineBtn: $('#btn-outline'), ai: $('#btn-ai'), exportBtn: $('#btn-export'), exportMenu: $('#export-menu'), theme: $('#btn-theme'),
   findbar: $('#findbar'), findInput: $('#find-input'), findCount: $('#find-count'),
   findPrev: $('#find-prev'), findNext: $('#find-next'), findClose: $('#find-close'),
   emptyOpen: $('#empty-open'), emptyNew: $('#empty-new'), toast: $('#toast'),

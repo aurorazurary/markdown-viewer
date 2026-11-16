@@ -29,6 +29,7 @@
           <button data-export="folder">Show in folder</button>
         </div>
       </div>
+      <button id="btn-ai" class="icon" title="AI summary (Ctrl+Shift+A)" data-icon="sparkle"></button>
       <button id="btn-theme" class="icon" title="Theme" data-icon="theme-system"></button>
     </div>
   </header>
@@ -81,6 +82,50 @@
       <div id="editor-pane" hidden></div>
       <div id="view-pane" hidden tabindex="-1"><article id="view" class="markdown-body"></article></div>
     </section>
+    <aside id="ai-panel" hidden aria-label="AI summary">
+      <div class="ai-head">
+        <strong>AI summary</strong>
+        <button id="ai-settings-btn" class="icon" title="AI settings" data-icon="gear"></button>
+        <button id="ai-close" class="icon" title="Close (Ctrl+Shift+A)" data-icon="close"></button>
+      </div>
+      <div id="ai-main">
+        <div id="ai-output" class="markdown-body"></div>
+        <div id="ai-status" aria-live="polite"></div>
+        <div class="ai-ask">
+          <textarea id="ai-request" rows="2" placeholder="What do you want from this file? (optional, e.g. &quot;just the setup steps&quot;)"></textarea>
+          <div class="ai-actions">
+            <button id="ai-run" class="primary">Summarize</button>
+            <button id="ai-stop" hidden>Stop</button>
+          </div>
+        </div>
+      </div>
+      <form id="ai-settings" hidden>
+        <label>Provider
+          <select id="ai-provider">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI-compatible (OpenAI, OpenRouter, Groq, Ollama, LM Studio…)</option>
+          </select>
+        </label>
+        <label>Model
+          <input id="ai-model" list="ai-models" spellcheck="false" autocomplete="off">
+          <datalist id="ai-models"></datalist>
+        </label>
+        <label id="ai-base-row">Base URL
+          <input id="ai-base" spellcheck="false" placeholder="https://api.openai.com/v1 · http://localhost:11434/v1">
+        </label>
+        <label>API key
+          <input id="ai-key" type="password" spellcheck="false" autocomplete="off">
+        </label>
+        <div class="ai-key-row">
+          <button type="button" id="ai-save-key">Save key</button>
+          <button type="button" id="ai-remove-key" hidden>Remove key</button>
+          <span id="ai-key-state"></span>
+        </div>
+        <p class="ai-note">Keys are stored encrypted in Windows Credential Manager and only used by the app itself.
+          When you ask, the document's text is sent to the provider you choose, using your own key and account.</p>
+        <button type="submit" id="ai-settings-done" class="primary">Done</button>
+      </form>
+    </aside>
   </main>
 
   <div id="findbar" hidden>

@@ -14,12 +14,12 @@ export async function waitFor(fn, ms = 4000) { const t = Date.now(); while (Date
 const isDoc = (p) => /tauri\.localhost/.test(p.url());
 let port = 9400 + Math.floor(Math.random() * 300);
 
-export async function launch(file, { profileDir }) {
+export async function launch(file, { profileDir, env = {} }) {
   const t0 = Date.now();
   const dbg = port++;
   const proc = spawn(exe, file ? [file] : [], {
     stdio: 'ignore',
-    env: { ...process.env, MDV_HIDDEN: '1', MDV_USER_DATA: profileDir, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${dbg}` },
+    env: { ...process.env, MDV_HIDDEN: '1', MDV_USER_DATA: profileDir, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${dbg}`, ...env },
   });
   const exited = new Promise((r) => proc.once('exit', () => r(true)));
   let browser = null;

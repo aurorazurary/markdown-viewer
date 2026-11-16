@@ -1,7 +1,7 @@
 # Markdown Viewer
 
 A **lightweight Windows tool for easy viewing and quick editing of Markdown (`.md`) files**.
-Files open as a clean, rendered page (GitHub style). When you want to change something, switch to the raw text, where a **built-in formatting toolbar** handles headings, lists, links, tables and code blocks for you. You can also **export any `.md` file as PDF or HTML**.
+Files open as a clean, rendered page (GitHub style). When you want to change something, switch to the raw text, where a **built-in formatting toolbar** handles headings, lists, links, tables and code blocks for you. You can also **export any `.md` file as PDF or HTML**, and for long files, get an **AI summary** (or ask what you want from the file) using **your own API key**.
 
 - **Installer: about 1.5 MB** (the app itself is a 3.8 MB exe). It uses the WebView2 engine that ships with Windows 11 instead of bundling a browser.
 - Starts in under a second, one window per file.
@@ -11,6 +11,10 @@ Files open as a clean, rendered page (GitHub style). When you want to change som
 | Edit + live preview (Split) | Dark theme |
 |---|---|
 | ![Split view with toolbar](docs/screenshots/split.png) | ![Dark theme](docs/screenshots/dark.png) |
+
+**AI summary panel** (bring your own key; this screenshot uses a canned answer):
+
+![AI summary panel](docs/screenshots/ai.png)
 
 ## Download
 
@@ -33,6 +37,11 @@ The installer registers Markdown Viewer for `.md` and `.markdown`, and uninstall
   - Headings H1–H3, bold, italic, strikethrough, inline code.
   - Links, images, bullet / numbered / task lists, quotes, code blocks, horizontal rule, undo / redo.
   - **Tables:** insert one, **convert selected lines** (tab, comma, `|` or multi-space separated) into a table, tidy up the table under the cursor, or add a row.
+- **AI summary (optional, bring your own key):** one click for a short summary of a long file, or say what you want from it ("just the setup steps", "what do I need to decide?").
+  - Answers stream into a side panel, and cited sections are clickable.
+  - Works with **Anthropic (Claude)** or any **OpenAI-compatible** endpoint: OpenAI, OpenRouter, Groq, or a local Ollama / LM Studio server.
+  - Your key is stored encrypted in **Windows Credential Manager**, and only the app's native side reads it.
+  - **Privacy:** when you ask, the document's text is sent to the provider you picked, under your own account. Nothing is sent until you click Summarize or Ask.
 - **Export to PDF** (A4, light theme) or a **standalone HTML** page.
 - **Safe saving:**
   - Closing with unsaved changes asks first.
@@ -51,18 +60,20 @@ The installer registers Markdown Viewer for `.md` and `.markdown`, and uninstall
 | Ctrl+W | Close window | Ctrl + / − / 0 | Zoom |
 | Ctrl+B / I / K | Bold / italic / link | Ctrl+1 / 2 / 3 | Heading level |
 | Ctrl+Shift+7 / 8 / 9 | Numbered / bullet / task list | Ctrl+Shift+T | Table |
+| Ctrl+Shift+A | AI summary panel | | |
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
 | Desktop shell | [Tauri 2](https://tauri.app) (Rust) on Microsoft Edge **WebView2** |
-| Native side | Rust: windows, file I/O, single-instance, PDF export via WebView2 `PrintToPdf` |
+| Native side | Rust: windows, file I/O, single-instance, PDF export via WebView2 `PrintToPdf`, AI requests ([reqwest](https://crates.io/crates/reqwest), streaming) with keys in Windows Credential Manager ([keyring](https://crates.io/crates/keyring)) |
 | UI | Vanilla JavaScript (ES modules), HTML, CSS; bundled with [Vite](https://vite.dev) |
 | Markdown rendering | [markdown-it](https://github.com/markdown-it/markdown-it) + task lists + heading anchors, [highlight.js](https://highlightjs.org), [DOMPurify](https://github.com/cure53/DOMPurify) for sanitising, [github-markdown-css](https://github.com/sindresorhus/github-markdown-css) for styling |
 | Editor | [CodeMirror 6](https://codemirror.net) with the Markdown language package |
 | Installer | NSIS (via the Tauri bundler) |
-| Tests | End-to-end with [Playwright](https://playwright.dev) driving the real app over WebView2's DevTools protocol |
+| AI providers | [Anthropic Messages API](https://platform.claude.com/docs) (default model `claude-opus-5-5`) or any OpenAI-compatible `/chat/completions` endpoint |
+| Tests | End-to-end with [Playwright](https://playwright.dev) driving the real app over WebView2's DevTools protocol, with a local mock AI server |
 
 Architecture, module map and build instructions: **[DEVELOPER.md](DEVELOPER.md)**.
 

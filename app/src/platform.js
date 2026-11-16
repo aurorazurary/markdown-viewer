@@ -1,5 +1,5 @@
 // Tauri implementation of the small `api` the UI talks to (files, dialogs, windows, export, settings).
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc, Channel } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open as openDialog, save as saveDialog, message } from '@tauri-apps/plugin-dialog';
@@ -14,7 +14,14 @@ const MD_FILTERS = [
   { name: 'All files', extensions: ['*'] },
 ];
 const SETTINGS_KEY = 'mdv-settings';
-const DEFAULTS = { theme: 'system', outline: true, zoom: 1 };
+const DEFAULTS = {
+  theme: 'system', outline: true, zoom: 1,
+  // AI summary (API keys are NOT here: they live in Windows Credential Manager, handled by Rust)
+  aiOpen: false,
+  aiProvider: 'anthropic',
+  aiModels: { anthropic: 'claude-opus-5-5', openai: '' },
+  aiBaseUrl: 'https://api.openai.com/v1',
+};
 
 // Tests replace native dialogs through window.__mdvTest = { open, save, closeAnswer }.
 const stub = (k) => (window.__mdvTest && k in window.__mdvTest ? { v: window.__mdvTest[k] } : null);
@@ -149,4 +156,30 @@ export const api = {
   onFileChanged: (cb) => { onChanged = cb; },
   onSaveThenClose: (cb) => { onSaveThenClose = cb; },
   onDropFiles: (cb) => webview.onDragDropEvent((e) => cb(e.payload)),
+
+  // ---------- AI summary ----------
+  aiKeySaved: (provider) => invoke('ai_key_saved', { provider }),
+  aiSaveKey: (provider, key) => invoke('ai_save_key', { provider, key }),
+  aiRemoveKey: (provider) => invoke('ai_remove_key', { provider }),
+  /**
+   * Stream an answer. `onText(chunk)` gets text as it arrives.
+   * Returns { cancel(), done } where `done` resolves to the stop reason ('cancelled' if stopped).
+   */
+  aiRun(req, onText) {
+    const id = ++aiSeq;
+    const channel = new Channel();
+    let finish;
+    const done = new Promise((resolve, reject) => {
+      finish = { resolve, reject };
+      channel.onmessage = (m) => {
+        if (m.type === 'text') onText(m.text);
+        else if (m.type === 'done') resolve(m.stop ?? 'end');
+      };
+    });
+    invoke('ai_run', { req: { id, ...req }, onEvent: channel })
+      .then(() => setTimeout(() => finish.resolve('cancelled'), 200)) // no 'done' event => it was cancelled
+      .catch((e) => finish.reject(new Error(String(e))));
+    return { done, cancel: () => invoke('ai_cancel', { id }) };
+  },
 };
+let aiSeq = 0;

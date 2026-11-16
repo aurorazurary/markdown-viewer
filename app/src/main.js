@@ -1,6 +1,7 @@
 // App entry: owns the document state and modes (Read / Edit / Split), and wires UI modules together.
 //   platform.js  native side (files, dialogs, windows, export)   markdown.js  render + export HTML
 //   ui/*         rendered view, outline, find, DOM refs           editor/*     CodeMirror + toolbar commands (lazy)
+//   ai/*         AI summary panel + prompt building
 import 'github-markdown-css/github-markdown.css';
 import './style.css';
 import { hljsCss, exportDocument } from './markdown.js';
@@ -11,6 +12,7 @@ import { applyIcons, icons } from './ui/icons.js';
 import { renderView, scrollToId, viewTopLine, scrollViewToLine, wireView } from './ui/view.js';
 import { setOutline, markCurrentHeading, wireOutline } from './ui/outline.js';
 import { openFind, closeFind, runFind, isFindOpen, wireFind } from './ui/find.js';
+import { createAiPanel } from './ai/panel.js';
 
 const hl = document.createElement('style');
 hl.textContent = hljsCss;
@@ -24,6 +26,7 @@ let editor = null; // created on first Edit/Split
 let settings = { theme: 'system', outline: true, zoom: 1 };
 let pendingDisk = null; // newer disk version waiting while the user has unsaved edits
 let lastDirty = false;
+let outlineItems = [];
 
 const THEME_LABEL = { system: 'follow Windows', light: 'light', dark: 'dark' };
 const norm = (t) => t.replace(/\r\n?/g, '\n');
@@ -40,7 +43,7 @@ function updateChrome() {
   const title = doc.open ? `${dirty ? '● ' : ''}${name} — Markdown Viewer` : 'Markdown Viewer';
   if (document.title !== title) { document.title = title; api.setTitle(title); }
   if (dirty !== lastDirty) { lastDirty = dirty; api.setDirty(dirty); }
-  for (const b of [el.save, el.exportBtn, ...el.modes.querySelectorAll('button')]) b.disabled = !doc.open;
+  for (const b of [el.save, el.exportBtn, el.ai, ...el.modes.querySelectorAll('button')]) b.disabled = !doc.open;
 }
 
 function applySettings() {
@@ -49,13 +52,20 @@ function applySettings() {
   el.outlineBtn.classList.toggle('on', settings.outline);
   el.outline.hidden = !(settings.outline && doc.open);
   api.setZoom(settings.zoom);
+  ai.sync({ ...settings, aiOpen: settings.aiOpen && doc.open });
 }
-const setSetting = async (patch) => { settings = await api.setSettings(patch); applySettings(); };
+/** Apply a settings change immediately (so nothing reads a stale copy), then persist it. */
+const setSetting = async (patch) => {
+  settings = { ...settings, ...patch };
+  applySettings();
+  settings = await api.setSettings(patch);
+};
 const zoomBy = (d) => setSetting({ zoom: Math.min(3, Math.max(0.5, Math.round((settings.zoom + d) * 10) / 10)) });
 
 // ---------- rendering ----------
 function refreshView() {
-  setOutline(renderView(doc.text, doc.dirUrl, api.imageSrc));
+  outlineItems = renderView(doc.text, doc.dirUrl, api.imageSrc);
+  setOutline(outlineItems);
   if (isFindOpen()) runFind(false);
 }
 
@@ -74,6 +84,7 @@ function syncPreview() {
 
 // ---------- document ----------
 function setDoc(r) {
+  const isNewFile = r.file !== doc.file || !doc.open;
   doc.open = true;
   api.markOpen();
   doc.file = r.file;
@@ -84,6 +95,7 @@ function setDoc(r) {
   el.empty.hidden = true;
   if (editor) editor.setText(doc.text);
   refreshView();
+  if (isNewFile) ai.reset();
   setMode(mode, true);
   el.viewPane.scrollTop = 0;
   applySettings();
@@ -198,10 +210,19 @@ async function doExport(kind) {
 
 // ---------- wiring ----------
 wireFind();
-wireOutline((it) => {
+/** Jump to a heading (from the outline or a section the AI cited). */
+function jumpTo(it) {
   if (mode === 'edit') return editor.gotoLine(it.line);
   scrollToId(it.id);
   if (mode === 'split') editor.scrollToLine(it.line);
+}
+wireOutline(jumpTo);
+const ai = createAiPanel({
+  api,
+  getDoc: () => ({ open: doc.open, text: doc.text, file: doc.file, outline: outlineItems }),
+  onJump: (id) => { const it = outlineItems.find((h) => h.id === id); if (it) jumpTo(it); else scrollToId(id); },
+  getSettings: () => settings,
+  setSettings: setSetting,
 });
 wireView({
   getDirUrl: () => doc.dirUrl,
@@ -257,6 +278,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (!e.ctrlKey || e.altKey) return;
+  if (e.shiftKey && e.key.toLowerCase() === 'a') { e.preventDefault(); if (doc.open) ai.toggle(); return; }
   const act = SHORTCUTS[e.key.toLowerCase()];
   if (act) { e.preventDefault(); act(e); }
 });

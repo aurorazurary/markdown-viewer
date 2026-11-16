@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { appDir, launch as launchApp, sleep, waitFor } from './harness.mjs';
+import { startMockAi } from './mock-ai.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-test-'));
 const shots = process.env.SHOTS || path.join(tmp, 'shots');
@@ -13,7 +14,7 @@ fs.mkdirSync(shots, { recursive: true });
 
 let failed = 0, passed = 0;
 const ok = (cond, msg) => { if (cond) { passed++; console.log('  ok  ', msg); } else { failed++; console.log('  FAIL', msg); } };
-const launch = (file) => launchApp(file, { profileDir: path.join(tmp, 'profile') });
+const launch = (file, env) => launchApp(file, { profileDir: path.join(tmp, 'profile'), env });
 const errorsOf = (win) => { const errs = []; win.on('pageerror', (e) => errs.push(String(e))); win.on('console', (m) => {
     if (m.type() !== 'error') return;
     // Expected from the fixture's deliberate XSS line: CSP blocks the handler (DOMPurify also strips it), and its src "x" doesn't exist.
@@ -245,6 +246,128 @@ console.log('\n# New document');
   await app.close(win);
   await app.exited();
   ok(fs.existsSync(out) && fs.readFileSync(out, 'utf8') === '# Fresh note', 'close -> Save writes the untitled doc via Save As');
+}
+
+// ---------------------------------------------------------------- 4. AI summary (against a local mock provider)
+console.log('\n# AI summary (mock provider, test-only key store)');
+{
+  const mock = await startMockAi();
+  const aiDoc = path.join(tmp, 'ai.md');
+  const long = Array.from({ length: 40 }, (_, i) => `Paragraph ${i} of a long section that nobody wants to read in full.`).join('\n\n');
+  fs.writeFileSync(aiDoc, `# Trip notes\n\nIntro text.\n\n## Budget\n\n| Item | Cost |\n|---|---|\n| Hostel | $185 |\n\n## Details\n\n${long}\n\nTHE-END-MARKER\n`);
+  const { app, win } = await launch(aiDoc, { MDV_ANTHROPIC_BASE_URL: mock.url });
+  const errs = errorsOf(win);
+  const status = () => win.locator('#ai-status').textContent();
+  const output = () => win.locator('#ai-output').innerText();
+  const lastReq = () => mock.requests[mock.requests.length - 1];
+  const settingsOpen = () => win.locator('#ai-settings').isVisible();
+  const closeSettings = () => win.locator('#ai-settings-done').click();
+
+  // Clean any leftover test keys from an earlier aborted run.
+  await win.locator('#view-pane').click({ position: { x: 5, y: 5 } }); // focus the page first, as a user would
+  await win.keyboard.press('Control+Shift+a');
+  const opened = await waitFor(() => win.locator('#ai-panel').isVisible(), 3000);
+  if (!opened) console.log('    panel did not open:', await win.evaluate(() => ({ docOpen: window.__mdv?.doc.open, btnDisabled: document.querySelector('#btn-ai').disabled, active: document.activeElement?.id || document.activeElement?.tagName, ls: localStorage.getItem('mdv-settings') })));
+  ok(opened, 'Ctrl+Shift+A opens the AI panel');
+  for (const prov of ['anthropic', 'openai']) {
+    await win.locator('#ai-settings-btn').click();
+    await win.locator('#ai-provider').selectOption(prov);
+    if (await win.locator('#ai-remove-key').isVisible()) await win.locator('#ai-remove-key').click();
+    await closeSettings();
+  }
+  await win.locator('#ai-settings-btn').click();
+  await win.locator('#ai-provider').selectOption('anthropic');
+  await closeSettings();
+
+  // No key yet -> settings open with a prompt to add one.
+  await win.locator('#ai-run').click();
+  ok(await waitFor(async () => (await settingsOpen()) && /Add your Anthropic API key/.test(await win.locator('#ai-key-state').textContent())), 'without a key, Summarize asks for one');
+  ok((await win.locator('#ai-model').inputValue()) === 'claude-opus-5-5', 'default Claude model is claude-opus-5-5');
+  await win.locator('#ai-key').fill('test-key-123');
+  await win.locator('#ai-save-key').click();
+  ok(await waitFor(async () => /saved/i.test(await win.locator('#ai-key-state').textContent())), 'key saves to Credential Manager');
+  ok((await win.locator('#ai-key').inputValue()) === '', 'key field is cleared after saving');
+  ok(!(await win.evaluate(() => JSON.stringify(localStorage))).includes('test-key-123'), 'key is not stored in page storage');
+  await closeSettings();
+
+  // Summary.
+  await win.locator('#ai-run').click();
+  ok(await waitFor(async () => /Answered by/.test(await status()), 8000), 'summary streams and finishes');
+  const out = await output();
+  ok(out.includes('日本語') && out.includes('Costs are in Budget'), 'answer renders as Markdown, multi-byte text intact');
+  const r1 = lastReq();
+  ok(r1.path === '/v1/messages' && r1.headers['x-api-key'] === 'test-key-123' && r1.headers['anthropic-version'] === '2026-10-21', 'Anthropic request: endpoint, key and version headers');
+  ok(r1.body.model === 'claude-opus-5-5' && r1.body.stream === true && r1.body.output_config?.effort === 'low', 'Anthropic request: model, streaming, low effort');
+  ok(r1.body.fallbacks === 'default' && r1.headers['anthropic-beta'] === 'server-side-fallback-2026-07-01', 'Anthropic request: server-side refusal fallback enabled');
+  const p1 = r1.body.messages?.[0]?.content || '';
+  ok(p1.includes('THE-END-MARKER') && p1.includes('Paragraph 39') && p1.includes('(#budget)') && /short summary/.test(p1), 'prompt carries the whole document, section ids and the summary request');
+  ok(typeof r1.body.system === 'string' && r1.body.system.includes('Markdown document'), 'system prompt sent');
+
+  // Cited section link jumps in the document.
+  await win.locator('#view-pane').evaluate((p) => { p.scrollTop = 0; });
+  await win.locator('#ai-output a', { hasText: 'Budget' }).click();
+  ok(await waitFor(async () => {
+    const top = await win.locator('#u-budget').evaluate((h) => h.getBoundingClientRect().top - document.querySelector('#view-pane').getBoundingClientRect().top);
+    return Math.abs(top) < 40;
+  }), 'clicking a cited section jumps to it');
+
+  // Ask box.
+  await win.locator('#ai-request').fill('just the budget');
+  ok((await win.locator('#ai-run').textContent()) === 'Ask', 'button becomes "Ask" when there is a request');
+  await win.locator('#ai-request').press('Enter');
+  ok(await waitFor(async () => /Answered by/.test(await status()) && mock.requests.length >= 2, 8000), 'Enter in the ask box runs it');
+  ok(lastReq().body.messages[0].content.trim().endsWith('What I want from this document: just the budget'), 'custom request goes last in the prompt');
+
+  // Provider error shows a readable message.
+  await win.locator('#ai-settings-btn').click();
+  await win.locator('#ai-model').fill('bad-model');
+  await win.locator('#ai-model').dispatchEvent('change');
+  await closeSettings();
+  await win.locator('#ai-run').click();
+  ok(await waitFor(async () => /bad-model not found/.test(await status()) && (await win.locator('#ai-status').getAttribute('data-kind')) === 'error'), 'provider errors are shown readably');
+
+  // Stop a running answer.
+  await win.locator('#ai-settings-btn').click();
+  await win.locator('#ai-model').fill('slow');
+  await win.locator('#ai-model').dispatchEvent('change');
+  await closeSettings();
+  await win.locator('#ai-run').click();
+  await waitFor(async () => /chunk 2/.test(await output()), 5000);
+  await win.locator('#ai-stop').click();
+  ok(await waitFor(async () => (await status()) === 'Stopped.' && (await win.locator('#ai-run').isVisible())), 'Stop cancels a running answer');
+
+  // OpenAI-compatible provider.
+  await win.locator('#ai-settings-btn').click();
+  await win.locator('#ai-provider').selectOption('openai');
+  ok(await win.locator('#ai-base').isVisible(), 'base URL field appears for OpenAI-compatible');
+  await win.locator('#ai-base').fill(mock.url + '/v1');
+  await win.locator('#ai-base').dispatchEvent('change');
+  await win.locator('#ai-model').fill('gpt-test');
+  await win.locator('#ai-model').dispatchEvent('change');
+  await win.locator('#ai-key').fill('oa-key');
+  await win.locator('#ai-save-key').click();
+  await waitFor(async () => /saved/i.test(await win.locator('#ai-key-state').textContent()));
+  await closeSettings();
+  await win.locator('#ai-request').fill('');
+  await win.locator('#ai-run').click();
+  ok(await waitFor(async () => /Answered by gpt-test/.test(await status()), 8000), 'OpenAI-compatible provider streams an answer');
+  const r2 = lastReq();
+  ok(r2.path === '/v1/chat/completions' && r2.headers.authorization === 'Bearer oa-key' && r2.body.stream === true
+    && r2.body.messages?.[0]?.role === 'system' && r2.body.messages?.[1]?.content.includes('THE-END-MARKER'), 'OpenAI request: endpoint, bearer key, system + document');
+  await win.screenshot({ path: path.join(shots, '08-ai-panel.png') });
+
+  // Clean up the test keys.
+  for (const prov of ['openai', 'anthropic']) {
+    await win.locator('#ai-settings-btn').click();
+    await win.locator('#ai-provider').selectOption(prov);
+    await waitFor(() => win.locator('#ai-remove-key').isVisible(), 2000);
+    await win.locator('#ai-remove-key').click();
+    ok(await waitFor(async () => /removed/i.test(await win.locator('#ai-key-state').textContent())), `${prov} test key removed`);
+    await closeSettings();
+  }
+  ok(errs.length === 0, 'no console errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
+  await app.kill();
+  mock.close();
 }
 
 console.log(`\n${passed} passed, ${failed} failed. Screenshots: ${shots}`);

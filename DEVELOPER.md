@@ -17,6 +17,7 @@ All code lives in [`app/`](app/).
 │     ├─ src/ui/outline.js    heading sidebar      src/ui/find.js   find bar        │
 │     ├─ src/ui/dom.js        element refs + toast  src/ui/icons.js  SVG icons      │
 │     ├─ src/editor/          CodeMirror editor + toolbar commands (lazy-loaded)    │
+│     ├─ src/ai/              AI summary panel (panel.js) + prompt builder (pure)   │
 │     ├─ src/paths.js         pure path ↔ file:// helpers                           │
 │     └─ src/platform.js      the ONLY module that talks to Tauri ──────────┐       │
 └──────────────────────────────────────────────────────────────────────────│───────┘
@@ -26,6 +27,7 @@ All code lives in [`app/`](app/).
 │   main.rs   windows (one per file, single instance, focus-if-already-open),       │
 │             read/write/stat files, browser-shortcut lockdown                     │
 │   pdf.rs    PDF export: hidden webview + WebView2 PrintToPdf                      │
+│   ai.rs     AI: keys in Credential Manager, streaming Anthropic / OpenAI calls   │
 │  Plugins: dialog (open/save/message), opener (URLs, reveal in Explorer),          │
 │           single-instance                                                         │
 └───────────────────────────────────────────────────────────────────────────────────┘
@@ -56,6 +58,9 @@ All code lives in [`app/`](app/).
 | `app/src/style.css` | App chrome; colours as CSS variables with light/dark via `prefers-color-scheme` |
 | `app/src-tauri/src/main.rs` | Window creation, commands `read_doc`, `write_doc`, `file_mtime`, `is_file`, `open_window`, `set_window_file`, `focus_existing` |
 | `app/src-tauri/src/pdf.rs` | `export_pdf` command |
+| `app/src-tauri/src/ai.rs` | `ai_key_saved` / `ai_save_key` / `ai_remove_key` (keyring → Windows Credential Manager), `ai_run` (streams over a Tauri `Channel`), `ai_cancel` |
+| `app/src/ai/panel.js` | AI side panel: settings form, run / stop, streaming Markdown output, cited-section jumps |
+| `app/src/ai/prompt.js` | Pure: system prompt, prompt = whole document + section list (with heading ids) + the request |
 | `app/src-tauri/tauri.conf.json` | App config, CSP, asset-protocol scope (images only), bundle / NSIS / `.md` file association |
 | `app/src-tauri/capabilities/default.json` | Permissions the page may use (window, webview zoom, dialog, opener) |
 | `app/test/e2e.mjs`, `test/harness.mjs` | End-to-end tests (see below) and the shared invisible-launch + CDP harness |
@@ -73,6 +78,17 @@ All code lives in [`app/`](app/).
 - **Close guard:** `onCloseRequested` (X button, Alt+F4, Ctrl+W) asks Save / Don't save / Cancel when the document is dirty. *Save* on an untitled document opens Save As.
 - **Images:** relative and `file:` image paths are resolved against the document folder. They load through Tauri's asset protocol, which is scoped to image extensions only.
 - **PDF export:** `exportDocument(forPrint)` builds a light-theme standalone page with `<base href>` set to the document folder. `pdf.rs` writes it to a temp file, loads it in a hidden webview, calls `ICoreWebView2_7::PrintToPdf` (A4, backgrounds on), then deletes the temp file.
+- **AI summary:**
+  1. `ai/prompt.js` builds the prompt: the whole document first (never truncated), then the section list with heading ids, then the request (default summary, or the user's own).
+  2. `platform.aiRun` calls the Rust `ai_run` command with a `Channel`.
+  3. Rust reads the key from Credential Manager and streams SSE from the provider. It sends `{type:'text'}` chunks and a final `{type:'done', stop}`.
+  4. The panel re-renders the Markdown once per animation frame. `#id` links in the answer jump to that heading.
+  - **Anthropic:** `POST /v1/messages` with `anthropic-version: 2026-10-21` and `stream: true`.
+    - `output_config.effort: "low"` is sent on models that support effort; summarizing doesn't need deep reasoning.
+    - `fallbacks: "default"` plus the `server-side-fallback-2026-07-01` beta is sent on models that support server-side refusal fallback.
+    - Stop reasons `max_tokens` and `refusal` are shown to the user.
+  - **OpenAI-compatible:** `POST {base}/chat/completions`, `stream: true`, with a bearer key (optional, for local servers).
+  - **Tests** point Anthropic at a mock with `MDV_ANTHROPIC_BASE_URL`. Test runs store keys under the keyring service `markdown-viewer-test`, never the real `markdown-viewer`.
 - **Theme:** the `system` / `light` / `dark` setting is stored in localStorage. `window.setTheme()` sets WebView2's preferred colour scheme, so all CSS keeps using `prefers-color-scheme`.
 
 ## Security notes
@@ -80,6 +96,7 @@ All code lives in [`app/`](app/).
 - Markdown may contain raw HTML. It's sanitised with DOMPurify, and the CSP (`script-src 'self'`) blocks inline scripts and handlers as a second layer.
 - Rendered heading ids get a `u-` prefix, so they can't collide with the app's own element ids.
 - Clicking a link to a non-Markdown local file reveals it in Explorer rather than running it. `http(s)`/`mailto` links open in the default browser.
+- API keys never live in the page: the key field is cleared after saving, and only Rust reads the key, from Windows Credential Manager. Nothing is sent to an AI provider unless the user clicks Summarize/Ask, and the panel says what is sent.
 - WebView2 browser shortcuts (F5, Ctrl+R, Ctrl+P, Ctrl+F…) are disabled, and the app implements its own. Reloading with unsaved edits triggers a "leave page?" prompt.
 
 ## Build & run
@@ -120,6 +137,11 @@ What it covers:
    - Saving with CRLF preserved, and auto-reload / conflict banner.
    - HTML and PDF export, dark theme, and the unsaved-changes guard (Cancel / Don't save).
 3. **New untitled document:** close → Save goes through Save As.
+4. **AI summary, against `test/mock-ai.mjs`** (a local fake of both APIs):
+   - Key save and removal, and that the key isn't in page storage.
+   - Exact request headers and body: version, effort, fallbacks, the full document in the prompt.
+   - Streaming, including a multi-byte character split across network chunks.
+   - Cited-section jump, the ask box, error display, Stop, and the OpenAI-compatible path.
 
 `SHOTS=<dir>` keeps the screenshots.
 
@@ -141,5 +163,7 @@ What it covers:
 - WebView2 can't screenshot or paint a window that was never shown. That's why test windows are shown off-screen instead of being hidden.
 
 ## History
+
+- **v1.1.0 (2026-11-17):** AI summary panel. Bring your own key for Anthropic or any OpenAI-compatible endpoint; keys live in Windows Credential Manager.
 
 - **v1.0.0 (2026-11-13):** first release. Initially built on Electron (113 MB installer), then ported to Tauri 2 (1.5 MB installer) and refactored into the module layout above.

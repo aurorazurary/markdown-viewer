@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
+mod ai;
 mod pdf;
 
 use serde::Serialize;
@@ -175,8 +176,10 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Files::default())
+        .manage(ai::Jobs::default())
         .invoke_handler(tauri::generate_handler![
-            read_doc, write_doc, file_mtime, is_file, open_window, set_window_file, focus_existing, pdf::export_pdf
+            read_doc, write_doc, file_mtime, is_file, open_window, set_window_file, focus_existing, pdf::export_pdf,
+            ai::ai_key_saved, ai::ai_save_key, ai::ai_remove_key, ai::ai_run, ai::ai_cancel
         ])
         .on_window_event(|w, e| {
             if let tauri::WindowEvent::Destroyed = e {

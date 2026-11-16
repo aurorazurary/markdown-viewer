@@ -173,3 +173,35 @@ body.editing #findbar { top: 84px; }
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 40;
   background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.25);
 }
+
+/* ---- AI summary panel ---- */
+#ai-panel {
+  width: 360px; flex: none; display: flex; flex-direction: column; min-height: 0;
+  background: var(--chrome); border-left: 1px solid var(--border);
+}
+.ai-head { display: flex; align-items: center; gap: 2px; padding: 6px 6px 6px 14px; border-bottom: 1px solid var(--border); }
+.ai-head strong { flex: 1; }
+#ai-main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#ai-output.markdown-body { flex: 1; overflow: auto; padding: 14px 16px; font-size: 14px; background: transparent; }
+#ai-output:empty::before { content: 'Get a quick summary of this file, or say what you want from it below.'; color: var(--muted); }
+#ai-status { padding: 4px 16px; font-size: 12px; color: var(--muted); min-height: 8px; }
+#ai-status[data-kind="error"] { color: #cf222e; }
+#ai-status[data-kind="warn"] { color: #9a6700; }
+@media (prefers-color-scheme: dark) { #ai-status[data-kind="error"] { color: #ff7b72; } #ai-status[data-kind="warn"] { color: #d29922; } }
+.ai-ask { padding: 8px 12px 12px; border-top: 1px solid var(--border); }
+#ai-request, #ai-settings input, #ai-settings select {
+  width: 100%; border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+  border-radius: 6px; padding: 6px 8px; font: inherit; outline: none;
+}
+#ai-request { resize: vertical; min-height: 44px; }
+#ai-request:focus, #ai-settings input:focus, #ai-settings select:focus { border-color: var(--accent); }
+.ai-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+#ai-panel button:not(.icon) {
+  border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 5px 12px; cursor: pointer;
+}
+#ai-panel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+#ai-settings { flex: 1; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+#ai-settings label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 12px; }
+.ai-key-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.ai-note { font-size: 12px; color: var(--muted); margin: 0; }
+#ai-settings-done { align-self: flex-end; }
